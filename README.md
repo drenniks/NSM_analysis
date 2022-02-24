@@ -28,3 +28,5 @@ PopIII_NSMExplosionEnergy       = 1e+50     # Desired NSM explosion energy in er
 PopIII_NSMDelayTime             = 100       # Time between P3_binary explosion and NSM in Myr
 PopIII_NSMMetalMass             = 0.01      # Amount of metals ejected in solar masses
 ```
+5. `5_NSM_dict.py`
+    This script will create a dictionary `NSM_dict.json` to indicate when the chosen P3 star became a P3_binary, a NS_binary, and then a bh. The output and time are given for each particle type.
