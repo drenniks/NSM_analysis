@@ -20,10 +20,11 @@ Pipeline runs in the following order:
     Creates movies for each potential p3 star.
 
 Once you use the previous information to choose your P3 sacrifice, create a file called `PopIII_params.txt` and include these four lines:
-    ~~~
-    PopIII_NeutronStarMergers       = 1         # Turns NSMs on
-    PopIII_NSMParticleID            = 761313    # Chosen particle ID to become NSM
-    PopIII_NSMExplosionEnergy       = 1e+50     # Desired NSM explosion energy in ergs
-    PopIII_NSMDelayTime             = 100       # Time between P3_binary explosion and NSM in Myr
-    PopIII_NSMMetalMass             = 0.01      # Amount of metals ejected in solar masses
-    ~~~
+    
+```
+PopIII_NeutronStarMergers       = 1         # Turns NSMs on
+PopIII_NSMParticleID            = 761313    # Chosen particle ID to become NSM
+PopIII_NSMExplosionEnergy       = 1e+50     # Desired NSM explosion energy in ergs
+PopIII_NSMDelayTime             = 100       # Time between P3_binary explosion and NSM in Myr
+PopIII_NSMMetalMass             = 0.01      # Amount of metals ejected in solar masses
+```
