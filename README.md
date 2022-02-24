@@ -26,4 +26,4 @@ Once you use the previous information to choose your P3 sacrifice, create a file
     PopIII_NSMExplosionEnergy       = 1e+50     # Desired NSM explosion energy in ergs
     PopIII_NSMDelayTime             = 100       # Time between P3_binary explosion and NSM in Myr
     PopIII_NSMMetalMass             = 0.01      # Amount of metals ejected in solar masses
-    '''
+    ```
