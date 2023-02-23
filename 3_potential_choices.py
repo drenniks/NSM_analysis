@@ -1,52 +1,159 @@
+import time
+startTime = time.time()
+
 import yt
 from yt.units import Msun
+from ytree_significant import *
+import ytree 
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import json
-from mpl_toolkits.axes_grid1 import AxesGrid
+from mpl_toolkits.axes_grid1 import AxesGrid 
+
+font = {'family' : 'normal',
+        'weight' : 'normal',
+        'size'   : 22}
+
+matplotlib.rc('font', **font)
 
 yt.enable_plugins()
 
-fraction = .2
-fraction_increase = .1
-iterations = 5
+data_dir = "../"
 
-data_dir = "/storage/home/hhive1/dskinner6/data/SG64-2020/"
-
-with open('DD_data.json') as f:
+with open('DD_data_serial.json') as f:
     DD_data = json.load(f)
+
+min_mass = 20*Msun
+max_mass = 30*Msun
 
 outputs = np.array(list(DD_data.keys()))
 final_output = outputs[-1]
 final_string = 'DD' + final_output + '/output_' + final_output
 
+redshifts = []
+times = []
+for i, j in enumerate(DD_data):
+    redshifts.append(DD_data[j]['redshift'])
+    times.append(DD_data[j]['time'])
+redshifts = np.array(redshifts)
+times = np.array(times)
+
+## Load in most recent dataset to find biggest halo
+
 ds = yt.load(data_dir + final_string)
+hds = yt.load(data_dir + 'old_rockstar_halos/halos_DD' + final_output + '.0.bin')
 
 stars = ['p3', 'p2', 'p3_living']
 for s in stars:
     ds.add_particle_filter(s)
 
 ad = ds.all_data()
+halos = hds.all_data()
 
-## Replace with the central halo 
-sp = ds.sphere('c', (5, 'kpc'))
+## Biggest halo
+print('Finding the biggest halo')
+big_index = np.argwhere(halos['particle_mass'] == np.max(halos['particle_mass']))[0][0]
+big_mass = halos['particle_mass'][big_index].to('Msun')
+big_pos = halos['particle_position'][big_index].to('kpc')
+big_rvir = halos['virial_radius'][big_index].to('kpc')
+big_ident = halos['particle_identifier'][big_index]
 
-## Iterate over larger radii if there isn't a PopIII star that is within 20-30 Msun:
-min_mass = 20*Msun
-max_mass = 30*Msun
+tree = ytree.load(data_dir + 'old_rockstar_halos/trees/tree_0_0_0.dat')
+fn = tree.save_arbor()
+tree = ytree.load(fn)
 
-potential_p3_mass = []
-potential_p3_index = []
+## Halo in tree:
+tree_index = np.argwhere(tree['halo_id'] == big_ident)[0][0]
+my_tree = tree[tree_index]
+tree_nodes = list(my_tree['tree'])
 
-for i in range(iterations):
+## Initializing a dictionary for the most massive progenitor
+z = []
+for i in tree_nodes:
+    redshift = i['redshift']
+
+    if redshift not in z:
+        z.append(redshift)
+
+massive_prog = {}
+for i in z:
+    diff = redshifts - float(i)
+    minimum = np.min(np.abs(diff))
+    diff_index = np.argwhere(np.abs(diff) == np.min(minimum))[0][0]
     
-    sp_central = ds.sphere('c', sp.radius*fraction)
+    massive_prog[str(outputs[diff_index])] = {}
+    massive_prog[str(outputs[diff_index])]['halo_id'] = -1
+    massive_prog[str(outputs[diff_index])]['mass'] = -1
+    massive_prog[str(outputs[diff_index])]['position'] = -1
+    massive_prog[str(outputs[diff_index])]['rvir'] = -1
+
+for i in tree_nodes:
+    redshift = i['redshift']
     
-    p3_indices = sp_central['p3', 'particle_index']
-    p3_test = sp_central['p3', 'particle_mass'].to('Msun')
+    diff = redshifts - redshift
+    minimum = np.min(np.abs(diff))
+    diff_index = np.argwhere(np.abs(diff) == np.min(minimum))[0][0]
+    key = outputs[diff_index]
+    
+    m = i['mass']
+    identifier = i['halo_id']
+    pos = i['position'].to('unitary')
+    rvir = i['virial_radius'].to('unitary')
+    
+    if m > massive_prog[key]['mass']:
+        massive_prog[key]['mass'] = m.v.tolist()
+        massive_prog[key]['halo_id'] = identifier.tolist()
+        massive_prog[key]['position'] = pos.v.tolist()
+        massive_prog[key]['rvir'] = rvir.v.tolist()
+
+with open('massive_prog_info_serial.json', 'w') as outfile:
+    json.dump(massive_prog, outfile)
+
+### Loop over the branch to find potential Pop III choices 
+### Looping over the most massive progenitor
+potential_p3 = {}
+
+print('Finding potential P3 stars in branch.')
+for i, o in enumerate(massive_prog):
+    potential_p3[o] = {}
+    
+    ds = yt.load(data_dir + 'DD' + o + '/output_' + o)
+
+    potential_p3[o]['redshift'] = ds.current_redshift
+    
+    stars = ['p3', 'p2', 'p3_living']
+    for s in stars:
+        ds.add_particle_filter(s)
+
+    ad = ds.all_data()
+    
+    halo_id = massive_prog[o]['halo_id']
+    halo_pos = ds.arr(massive_prog[o]['position'], 'unitary').to('kpc')
+    halo_rvir = ds.quan(massive_prog[o]['rvir'], 'unitary').to('kpc')
+    halo_mass = ds.quan(massive_prog[o]['mass'], 'Msun')
+    
+    sp = ds.sphere(halo_pos, halo_rvir)
+        
+    p3_indices = sp['p3', 'particle_index']
+    p3_test = sp['p3', 'particle_mass'].to('Msun')
+    p3_pos = sp['p3', 'particle_position'].to('kpc')
+    p2_pos = sp['p2', 'particle_position'].to('kpc')
+    
+    dr = np.sqrt(((p3_pos - halo_pos)**2).sum(1))
     huge_number = 1e20
-
+    
+    ## Replace with the central halo 
+    
+    prj = yt.ProjectionPlot(ds, 'x', 'density', center = halo_pos, weight_field='density', width=(10, 'kpc'))
+    prj.annotate_sphere([0,0], halo_rvir, coord_system='plot')
+    for p3 in p3_pos:
+        prj.annotate_marker(p3, plot_args={'color':'white'})
+    for p2 in p3_pos:
+        prj.annotate_marker(p2, plot_args={'color':'black'})
+    prj.annotate_timestamp(corner='upper_left', redshift=True, draw_inset_box=True)
+    prj.save(data_dir + 'NSM_analysis/images/' + o + '_massive_density.png')
+    
     p3_fixed = []
     for m in p3_test:
         if m < 1e-10:
@@ -54,144 +161,163 @@ for i in range(iterations):
         else:
             p3_fixed.append(m)
     p3_fixed = np.array(p3_fixed)
-
-    ## Check to see if there are any P3 stars in this radius that fall in the mass range.
+    
     any_stars = np.argwhere((min_mass < p3_fixed) & (p3_fixed < max_mass))
-
+    
     if len(any_stars) == 0:
-        fraction += fraction_increase
+        print('No P3 stars in desired mass range in this halo.')
         continue
     else:
+        p_mass = []
+        p_index = []
+        p_dist = []
         for n in any_stars:
-            potential_p3_mass.append(p3_test[n])
-            potential_p3_index.append(p3_indices[n])
-        
-        print(i)
-        break
+            p_mass.append(p3_test[n][0].v.tolist())
+            p_index.append(p3_indices[n][0].v.tolist())
+            p_dist.append(dr[n][0].v.tolist())
+        potential_p3[o]['mass'] = p_mass
+        potential_p3[o]['index'] = p_index
+        potential_p3[o]['dist'] = p_dist
 
-p2_pos = ad['p2', 'particle_position'].to('kpc')   
-p3_pos = ad['p3', 'particle_position'].to('kpc')
-p3_ct = ad['p3', 'creation_time'].to('Myr')
-p3_id = ad['p3', 'particle_index']
-p3_m = ad['p3', 'particle_mass'].to('Msun')
+with open('potential_p3_info_serial.json', 'w') as outfile:
+    json.dump(potential_p3, outfile)
 
-intersect, p3_index, ind_b = np.intersect1d(p3_id, potential_p3_index, return_indices=True)
+## Find the unique star ids 
 
-p3_position = p3_pos[p3_index]
-p3_creation = p3_ct[p3_index]
-p3_ident = p3_id[p3_index]
-p3_masses = p3_m[p3_index]
+identity = [] 
+earliest_output = 1000
+to_be_deleted = []
 
-times = []
-outputs = []
-for i, j in enumerate(DD_data):
-    times.append(DD_data[j]['time'])
-    outputs.append(j)
-times = np.array(times)
-outputs = np.array(outputs)
-
-closest_outputs = []
-for i in range(len(p3_position)):
-    diff = times - p3_creation[i].v # want difference to be positive
-    positives = [num for num in diff if num > 0]
-    diff_index = np.argwhere(diff == np.min(positives))[0][0]
-    closest_outputs.append(outputs[diff_index])    
-
-f = open("potential_p3_info.txt", "w")
-for i in range(len(p3_position)):
-    f.write('------------------------------------------------------\n')
-    f.write('P3 index = ' + str(p3_ident[i]) + '\n')
-    f.write('P3 mass [Msun] = ' + str(p3_m[i]) + '\n')
-    f.write('P3 creation time [Myr] = ' + str(p3_creation.v[i]) + '\n')
-    f.write('P3 output creation = ' + str(outputs[diff_index][i]) + '\n')
-    f.write('------------------------------------------------------\n')
-f.close()
-
-potential = {}
-for i in range(len(p3_position)):
-    potential[str(p3_ident[i].v)] = {}
-    potential[str(p3_ident[i].v)]['creation_time'] = p3_creation[i].v.tolist()
-    potential[str(p3_ident[i].v)]['mass'] = p3_masses[i].to('Msun').v.tolist()
-    potential[str(p3_ident[i].v)]['position'] = p3_position[i].v.tolist()
+for i, j in enumerate(potential_p3):
+    try:
+        star_identity = potential_p3[j]['index']
+        if star_identity[0] not in identity:
+            identity.append(star_identity[0])
+        if int(j) < earliest_output:
+            earliest_output = int(j)
     
-# Saving potential P3 stars
+    except:
+        print('No stars in dataset ' + j)
+        to_be_deleted.append(j)
 
-with open('potential_P3_info.json', 'w') as outfile:
-    json.dump(potential, outfile)
+for i in to_be_deleted:
+    del potential_p3[i]
 
-
-fields = [
-    ("gas", "density"),
-    ("gas", "temperature"),
-    ("gas", "El_fraction"),
-    ("gas", "metallicity")
-]
-
+fig = plt.figure(figsize=(10, 8))
+for star in identity:
+    dist = []
+    z = []
+    for i, j in enumerate(potential_p3):
+        index = np.argwhere(np.array(potential_p3[j]['index']) == star)
+        
+        if len(index) == 0:
+            continue
+        else:
+            dist.append(potential_p3[j]['dist'][index[0][0]])
+            z.append(potential_p3[j]['redshift'])
+    plt.plot(dist, z, label = str(star))
+plt.legend()
+plt.xlabel('Distance to center of halo [kpc]')
+plt.ylabel('Redshift')
+plt.tight_layout()
+plt.savefig('images/potential_distances.png')
 
 # Grab min and max values of the below fields
-width = (3, 'kpc')
+print('Grabbing min and max values.')
+ds = yt.load(data_dir + final_string)
+hds = yt.load(data_dir + 'rockstar_halos/halos_DD' + final_output + '.0.bin')
+
+stars = ['p3', 'p2', 'p3_living']
+for s in stars:
+    ds.add_particle_filter(s)
+
+ad = ds.all_data()
+halos = hds.all_data()
+
+stars = ['p3', 'p2', 'p3_living']
+for s in stars:
+    ds.add_particle_filter(s)
+
+ad = ds.all_data()
+
+p3_pos = ad['p3', 'particle_position'].to('kpc')
+p3_id = ad['p3', 'particle_index']
+
+width = (10, 'kpc')
 direction = 'x'
 fields = ['density', 'temperature', 'El_fraction', 'metallicity']
-min_max = {}    
-for star in range(len(p3_ident)):
-    min_max[str(p3_ident[star].v)] = {}
-    p3_position = p3_pos[p3_index[star]].to('kpc')
 
-    print(p3_position)
+min_max = {}
+
+for star in range(len(identity)):
+    p3_place = np.argwhere(p3_id == identity[star])[0][0]
+    
+    min_max[str(identity[star])] = {}
+
+    p3_position = p3_pos[p3_place].to('kpc')
 
     for field in fields:
-        min_max[str(p3_ident[star].v)][field] = {}
+        min_max[str(identity[star])][field] = {}
 
         prj = yt.ProjectionPlot(ds, direction, field, center = p3_position.to('kpc'), width = width, weight_field = 'density', origin='native')
-        prj.annotate_marker(p3_position, plot_args={'color':'white'})
-        #prj.annotate_marker((0, 0, 0), plot_args={'color':'white'})
-        prj.annotate_timestamp(corner='upper_left', redshift=True, draw_inset_box=True)
-        prj.annotate_scale(corner='upper_right')
-        prj.annotate_title(str(int(p3_ident[star].v)))
-        prj.show()
 
         p = prj.plots[field]
-        min_max[str(p3_ident[star].v)][field]['min'] = p.cb.vmin
-        min_max[str(p3_ident[star].v)][field]['max'] = p.cb.vmax
+        min_max[str(identity[star])][field]['min'] = p.cb.vmin
+        min_max[str(identity[star])][field]['max'] = p.cb.vmax
 
 # Saving output dict
 
 with open('min_max_' + str(width[0]) + '.json', 'w') as outfile:
     json.dump(min_max, outfile)
 
-outs = []
-for i in outputs[diff_index::]:
-    outs.append(data_dir + 'DD' + i + '/output_' + i)
+# Making images for each potential choice
+data_dumps = []
+for i, j in enumerate(potential_p3):
+    data_dumps.append(data_dir + 'DD' + j + '/output_' + j)
 
-### Only iterate over the datasets where p3 star exists
-
-ts = yt.load(outs)
+ts = yt.DatasetSeries(data_dumps)
 
 for ds in ts.piter():
+    print(ds)
+    key = str(ds).split('_')[1]
     
     stars = ['p3', 'p2', 'p3_living']
     for s in stars:
         ds.add_particle_filter(s)
 
     ad = ds.all_data()
+    
+    prog_pos = ds.arr(massive_prog[key]['position'],'unitary').to('kpc')
+    prog_rvir = ds.quan(massive_prog[key]['rvir'], 'unitary').to('kpc')
+    
+    sp = ds.sphere(prog_pos, prog_rvir)
+    
+    all_id = ad['all', 'particle_index']
+    all_pos = ad['all', 'particle_position']
+    all_type = ad['all', 'particle_type']
+    p2_pos = ad['p2', 'particle_position']
 
-    ## Replace with the central halo 
-    sp = ds.sphere('c', (5, 'kpc'))
-    
-    p3_id = ad['p3', 'particle_index']
-    p3_pos = ad['p3', 'particle_position']
-    
-    for star in range(len(p3_ident)):
-        p3_position = p3_pos[p3_index[star]].to('kpc')
+    potential_ids = potential_p3[key]['index']
+    for star_focus in potential_ids:
+        p3_place = np.argwhere(all_id == star_focus)[0][0]
+        p3_position = all_pos[p3_place]
+        p3_type = all_type[p3_place]
+        
         for field in fields:
-            min_val = min_max[str(p3_ident[star].v)][field]['min']
-            max_val = min_max[str(p3_ident[star].v)][field]['max']
+            min_val = min_max[str(star_focus)][field]['min']
+            max_val = min_max[str(star_focus)][field]['max']
 
-            prj = yt.ProjectionPlot(ds, direction, field, center = p3_position.to('kpc'), width = width, weight_field = 'density', origin='native')
+            prj = yt.ProjectionPlot(ds, direction, field, center = prog_pos, width = width, weight_field = 'density')
             prj.annotate_marker(p3_position, plot_args={'color':'white'})
+            for p2 in p2_pos:
+                prj.annotate_marker(p2, plot_args={'color':'black'})
+            prj.annotate_sphere([0,0], prog_rvir, coord_system='plot')
             prj.annotate_timestamp(corner='upper_left', redshift=True, draw_inset_box=True)
             prj.annotate_scale(corner='upper_right')
-            prj.annotate_title(str(int(p3_ident[star].v)))
             prj.set_zlim(field, zmin=min_val, zmax = max_val)
+            prj.annotate_title(str(p3_type))
+            prj.save('images/potential_choices/' + str(ds) + '_' + field + '_' + str(width[0]) + '_' + str(star_focus) + '.png')
 
-            prj.save('images/potential_choices/' + str(ds) + '_' + field + '_' + str(width[0]) + '_' + str(int(p3_ident[star].v)) + '.png')
+import time
+executionTime = (time.time() - startTime)
+print('Execution time in seconds: ' + str(executionTime))

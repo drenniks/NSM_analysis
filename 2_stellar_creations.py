@@ -1,3 +1,6 @@
+import time
+startTime = time.time()
+
 import yt
 import numpy as np
 import matplotlib
@@ -14,9 +17,9 @@ font = {'family' : 'normal',
 
 matplotlib.rc('font', **font)
 
-data_dir = "/storage/home/hhive1/dskinner6/data/SG64-2020/"
+data_dir = "../"
 
-with open('DD_data.json') as f:
+with open('DD_data_serial.json') as f:
     DD_data = json.load(f)
 
 outputs = np.array(list(DD_data.keys()))
@@ -69,3 +72,7 @@ plt.xlabel('Creation Time [Myr]')
 
 #plt.show()
 plt.savefig('images/P3_creation_times.png')
+
+import time
+executionTime = (time.time() - startTime)
+print('Execution time in seconds: ' + str(executionTime))
