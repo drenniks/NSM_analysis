@@ -6,28 +6,24 @@ import ytree
 import numpy as np
 import matplotlib.pyplot as plt
 import json
-
+import load_ins as load
+import functions as func
 
 yt.enable_plugins()
 yt.enable_parallelism()
 
-run_dir = '../'
+run_dir = load.run_dir
 
-stars = ['p3_living', 'p3_binary', 'ns_binary', 'bh', 'p2', 'dm']
-types = [5, 12, 13, 6, 7, 1]
+stars = load.stars
+types = load.types
 
-with open('param_info.json') as f:
-    param_info = json.load(f)
-    
-with open('run_DD_data.json') as f:
-    DD_data = json.load(f)
+param_info = load.param_info
+DD_data = load.DD_data
+massive_prog = load.massive_prog
 
-with open('massive_prog_info.json') as f:
-    massive_prog = json.load(f)
+run_names = load.runs
 
-run_names = list(DD_data.keys())
-
-restart_ds = '0037'
+restart_ds = load.restart_ds
 
 ## See if we can match the run_original merger tree until the restart redshift. 
 

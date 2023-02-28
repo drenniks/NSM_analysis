@@ -18,9 +18,9 @@ font = {'family' : 'normal',
 
 matplotlib.rc('font', **font)
 
-data_dir = "../"
+data_dir = "../run_original/"
 
-with open('DD_data.json') as f:
+with open('DD_data_OG.json') as f:
     DD_data = json.load(f)
 
 outputs = np.array(list(DD_data.keys()))

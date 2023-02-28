@@ -20,9 +20,9 @@ matplotlib.rc('font', **font)
 yt.enable_plugins()
 yt.enable_parallelism()
 
-data_dir = "../"
+data_dir = "../run_original/"
 
-with open('DD_data.json') as f:
+with open('DD_data_OG.json') as f:
     DD_data = json.load(f)
 
 min_mass = 20*Msun
@@ -40,7 +40,7 @@ redshifts = np.array(redshifts)
 ## Load in most recent dataset to find biggest halo
 
 ds = yt.load(data_dir + final_string)
-hds = yt.load(data_dir + 'old_rockstar_halos/halos_DD' + final_output + '.0.bin')
+hds = yt.load(data_dir + 'rockstar_halos/halos_DD' + final_output + '.0.bin')
 
 stars = ['p3', 'p2', 'p3_living']
 for s in stars:
@@ -108,7 +108,7 @@ for i in tree_nodes:
 if yt.is_root():
     with open('massive_prog_info.json', 'w') as outfile:
         json.dump(massive_prog, outfile)
-'''
+
 ### Loop over the branch to find potential Pop III choices 
 ### Looping over the most massive progenitor
 dataset_series = []
@@ -159,7 +159,7 @@ for sto, ds in fns.piter(storage=potential_p3, dynamic=True):
     for p2 in p3_pos:
         prj.annotate_marker(p2, plot_args={'color':'black'})
     prj.annotate_timestamp(corner='upper_left', redshift=True, draw_inset_box=True)
-    prj.save(data_dir + 'NSM_analysis/images/' + o + '_massive_density.png')
+    prj.save('images/run_original/potential/' + o + '_massive_density.png')
     
     p3_fixed = []
     for m in p3_test:
@@ -346,7 +346,7 @@ for ds in ts.piter():
             prj.set_zlim(field, zmin=min_val, zmax = max_val)
             prj.annotate_title(str(p3_type))
             prj.save('images/potential_choices/' + str(ds) + '_' + field + '_' + str(width[0]) + '_' + str(star_focus) + '.png')
-'''
+
 if yt.is_root():
     import time
     executionTime = (time.time() - startTime)

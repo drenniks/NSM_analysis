@@ -21,17 +21,29 @@ set_limits = False
 plot_stars = True
 
 ## Dictionaries
-with open('param_info.json') as f: ## produced in 6a_output_dict.py
-    param_info = json.load(f)
+try:
+    with open('param_info.json') as f: ## produced in 6a_output_dict.py
+        param_info = json.load(f)
+except:
+    print('param_info.json doesnt exist yet -- run all_output_info.py')
 
-with open('massive_prog_info_incl_vir.json') as f: ## produced in 3a_massive_prog.py
-    massive_prog = json.load(f)
+try:
+    with open('massive_prog_info_incl_vir.json') as f: ## produced in 3a_massive_prog.py
+        massive_prog = json.load(f)
+except:
+        print('massive_prog_info_incl_vir.json doesnt exist yet -- 6_data_grab.py')
 
-with open('run_halos_incl_vir.json') as f: ## produced in 6aa_halo_finder.py
-    run_halos = json.load(f)
+try:
+    with open('run_halos_incl_vir.json') as f: ## produced in 6aa_halo_finder.py
+        run_halos = json.load(f)
+except:
+    print('run_halos_incl_vir.json doesnt exist yet -- run 6aa_halo_finder.py')
 
-with open('unit_conversion.json') as f: ## produced in unit_conversion.ipynb
-    unit_convert = json.load(f)
+try:
+    with open('unit_conversion.json') as f: ## produced in unit_conversion.ipynb
+        unit_convert = json.load(f)
+except: 
+    print('unit_conversion.json doesnt exist yet -- run unit_conversion.py')
 
 try: 
     with open('run_DD_data.json') as f:
